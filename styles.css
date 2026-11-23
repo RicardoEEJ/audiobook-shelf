@@ -803,3 +803,63 @@ output {
     padding: 0 10px;
   }
 }
+
+/* Listening log in the book panel */
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.log .lh {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mut);
+}
+.log .lh span {
+  font-weight: 500;
+}
+.log .lg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.log .lg:empty {
+  display: none;
+}
+.log .lg li {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 12px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--bg);
+  font-size: 14px;
+}
+.log .lx {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 16px;
+  color: var(--mut);
+  cursor: pointer;
+}
+.log .lx:hover {
+  color: var(--ink);
+  background: var(--panel);
+}
+.log .la {
+  display: flex;
+  gap: 8px;
+}
+.log .la input {
+  flex: 1;
+  min-width: 0;
+}

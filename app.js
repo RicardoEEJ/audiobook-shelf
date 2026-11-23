@@ -54,6 +54,18 @@
     if (L && L.books && L.savedAt > (S.savedAt || 0)) S = L;
   } catch (e) {}
 
+  // Listening log: b.listens holds every month a book was listened to (newest first).
+  // b.lastRead is kept equal to the newest entry so older code and backups still work.
+  function syncListens(b) {
+    const l = Array.isArray(b.listens) ? b.listens : b.lastRead ? [b.lastRead] : [];
+    b.listens = [...new Set(l.filter((m) => /^\d{4}-\d{2}$/.test(m)))]
+      .sort()
+      .reverse();
+    b.lastRead = b.listens[0] || "";
+  }
+  const migrate = () => S.books.forEach(syncListens);
+  migrate();
+
   let view = "pyramid",
     filter = "all",
     q = "",
@@ -204,7 +216,7 @@
       bs
         .map(
           (b) =>
-            `<button class="card" data-open="${b.id}"><div class="cover" style="${sty(b)}"><span class="ct">${esc(b.title)}</span><span class="ca">${esc(b.author)}</span></div><div class="cm"><span class="pill">${b.status === "read" ? TN[b.tier ?? 4] : ST[b.status]}</span><span>${b.score ? `<span class="star">★ ${fmtS(b.score)}</span> · ` : ""}${b.lastRead ? "Last: " + fmtM(b.lastRead) : b.status === "read" ? "Add last listened" : ""}</span></div></button>`,
+            `<button class="card" data-open="${b.id}"><div class="cover" style="${sty(b)}"><span class="ct">${esc(b.title)}</span><span class="ca">${esc(b.author)}</span></div><div class="cm"><span class="pill">${b.status === "read" ? TN[b.tier ?? 4] : ST[b.status]}</span><span>${b.score ? `<span class="star">★ ${fmtS(b.score)}</span> · ` : ""}${b.lastRead ? "Last: " + fmtM(b.lastRead) + (b.listens.length > 1 ? ` · ${b.listens.length}×` : "") : b.status === "read" ? "Add when you listened" : ""}</span></div></button>`,
         )
         .join("") || '<p class="mut">No books match.</p>';
   }
@@ -251,6 +263,16 @@
       .join("");
   }
 
+  function logHtml(b) {
+    const n = b.listens.length;
+    return `<div class="lh">Listening log<span>${n ? `Listened ${n}×` : "No dates yet"}</span></div><ul class="lg">${b.listens.map((m, i) => `<li>${fmtM(m)}<button class="lx" data-rmlisten="${i}" aria-label="Remove ${fmtM(m)}">×</button></li>`).join("")}</ul><div class="la"><input type="month" id="log-month" value="${thisMonth()}" max="${thisMonth()}" aria-label="Month listened"><button class="btn" id="addlisten">Add date</button></div>`;
+  }
+  function renderLog() {
+    const el = $("#log"),
+      b = byId(openId);
+    if (el && b) el.innerHTML = logHtml(b);
+  }
+
   function openBook(id) {
     const b = byId(id);
     if (!b) return;
@@ -267,7 +289,7 @@
         ],
         b.tier ?? 4,
       )}</select></label>
-<label>My score <output id="so">${b.score ? fmtS(b.score) + " / 10" : "Not rated"}</output><input type="range" id="f-score" min="0" max="10" step="0.5" value="${b.score || 0}"></label><label>Last listened<input type="month" id="f-lastRead" value="${esc(b.lastRead)}"></label>
+<label>My score <output id="so">${b.score ? fmtS(b.score) + " / 10" : "Not rated"}</output><input type="range" id="f-score" min="0" max="10" step="0.5" value="${b.score || 0}"></label><div class="wide log" id="log">${logHtml(b)}</div>
 <label class="wide">Version (the one I use or recommend)<textarea id="f-version" rows="2">${esc(b.version)}</textarea></label><label class="wide">My notes<textarea id="f-notes" rows="3" placeholder="Quotes, takeaways, what I want to apply">${esc(b.notes)}</textarea></label></div>
 <section class="about">${b.summary ? `<p>${esc(b.summary)}</p>` : ""}${b.ideas.length ? `<h3>Key ideas</h3><ul>${b.ideas.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}${b.why ? `<h3>How it fits my list</h3><p>${esc(b.why)}</p>` : ""}</section>
 <details class="edt" ${b.title === "New book" ? "open" : ""}><summary>Edit title, author, summary and ideas</summary><div><label>Title<input id="f-title" value="${esc(b.title)}"></label><label>Author<input id="f-author" value="${esc(b.author)}"></label><label>Year<input id="f-year" value="${esc(b.year)}"></label><label>Spanish title<input id="f-es" value="${esc(b.es)}"></label><label class="wide">Summary<textarea id="f-summary" rows="3">${esc(b.summary)}</textarea></label><label class="wide">Key ideas (one per line)<textarea id="f-ideas" rows="4">${esc(b.ideas.join("\n"))}</textarea></label><label class="wide">How it fits my list<textarea id="f-why" rows="2">${esc(b.why)}</textarea></label></div></details>
@@ -475,11 +497,9 @@
     } else if (d.finish) {
       const b = byId(d.finish);
       bk();
-      Object.assign(b, {
-        status: "read",
-        tier: b.tier ?? 4,
-        lastRead: thisMonth(),
-      });
+      Object.assign(b, { status: "read", tier: b.tier ?? 4 });
+      b.listens.push(thisMonth());
+      syncListens(b);
       delete b.prev;
       changed();
       renderMain();
@@ -516,6 +536,20 @@
         changed();
         renderMain();
       }
+    } else if (el.id === "addlisten" || d.rmlisten) {
+      const b = byId(openId);
+      if (!b) return;
+      if (d.rmlisten) b.listens.splice(+d.rmlisten, 1);
+      else {
+        const m = $("#log-month").value;
+        if (!m) return;
+        if (b.listens.includes(m)) return toast(`${fmtM(m)} is already in the log`);
+        b.listens.push(m);
+      }
+      syncListens(b);
+      changed();
+      renderLog();
+      renderMain();
     } else if (el.id === "add") {
       bk();
       const id = "b" + Date.now().toString(36);
@@ -529,6 +563,7 @@
         tier: null,
         score: 0,
         lastRead: "",
+        listens: [],
         summary: "",
         ideas: [],
         why: "",
@@ -556,6 +591,7 @@
     } else if (el.id === "undo") {
       if (undoSnap) {
         S = JSON.parse(undoSnap);
+        migrate();
         undoSnap = null;
         openId = null;
         $("#dlg").innerHTML = "";
@@ -581,6 +617,7 @@
         if (!Array.isArray(n.books)) throw 0;
         bk();
         S = n;
+        migrate();
         changed();
         renderMain();
         toast("Backup loaded", true);
@@ -619,6 +656,7 @@
           tier: null,
           score: 0,
           lastRead: "",
+          listens: [],
           summary: "",
           ideas: [],
           why: "",
